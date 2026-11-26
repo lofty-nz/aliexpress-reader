@@ -228,7 +228,7 @@ document.querySelector("#main").addEventListener("click", e => {
   if (e.target.id === "clBackup") {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([JSON.stringify(backupFile(S.res, checklist.getTags()), null, 1)], {type: "application/json"}));
-    a.download = `AliExpress checklist backup ${new Date().toISOString().slice(0, 10)}.json`; a.click();
+    a.download = `AliExpress checklist backup ${new Date().toLocaleDateString("en-CA")}.json`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
   if (e.target.id === "clRestore") document.querySelector("#clRestoreIn").click();

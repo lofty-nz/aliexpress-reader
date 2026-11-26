@@ -287,7 +287,7 @@ $("#tOrders").onclick = () => setView("orders");
 $("#tCheck").onclick = () => setView("check");
 $("#main").addEventListener("click", e => {
   if (e.target.id === "clBackup") download(new Blob([JSON.stringify(backupFile(S.res, checklist.getTags()), null, 1)], {type: "application/json"}),
-    `AliExpress checklist backup ${new Date().toISOString().slice(0, 10)}.json`);
+    `AliExpress checklist backup ${new Date().toLocaleDateString("en-CA")}.json`);
   if (e.target.id === "clRestore") $("#clRestoreIn").click();
 });
 $("#main").addEventListener("change", async e => {

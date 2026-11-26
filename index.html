@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AliExpress Reader</title>
+<style>
+  :root { --bg:#f6f5f2; --card:#fff; --ink:#1d1d1b; --mute:#6b6a66; --line:#e3e1dc; --accent:#d4380d; --ok:#2f7d32; --warn:#b26a00; }
+  * { box-sizing:border-box; }
+  body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:17px; margin:0; }
+  header h1 span { color:var(--accent); }
+  .ver { color:var(--mute); font-size:12px; }
+  button { font:inherit; padding:6px 12px; border:1px solid var(--line); background:var(--card); border-radius:6px; cursor:pointer; }
+  button.main { background:var(--accent); color:#fff; border-color:var(--accent); }
+  button:disabled { opacity:.5; cursor:default; }
+  .wrap { display:grid; grid-template-columns:200px minmax(0,1fr) 440px; height:calc(100vh - 51px); }
+  aside, main, #side { overflow:auto; }
+  aside { border-right:1px solid var(--line); padding:10px; }
+  aside .doc { padding:8px; border-radius:6px; cursor:pointer; margin-bottom:4px; }
+  aside .doc:hover { background:#eceae5; }
+  aside .doc.on { background:#fde8e1; }
+  aside .doc small { display:block; color:var(--mute); }
+  main { padding:12px 16px; }
+  #side { border-left:1px solid var(--line); padding:10px; background:var(--card); }
+  #side canvas { width:100%; border:1px solid var(--line); border-radius:4px; }
+  .sum { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:8px 12px; min-width:110px; }
+  .tile b { display:block; font-size:18px; font-variant-numeric:tabular-nums; }
+  .tile small { color:var(--mute); }
+  table { table-layout:fixed; width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:8px; overflow:hidden; }
+  th, td { text-align:left; padding:7px 9px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; color:var(--mute); font-weight:600; background:#faf9f7; position:sticky; top:0; }
+  td.n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  tr.o { cursor:pointer; }
+  tr.o:hover td { background:#fbf6f3; }
+  tr.o.on td { background:#fde8e1; }
+  .items { color:var(--mute); font-size:13px; }
+  .items div { margin-bottom:2px; }
+  td.store { max-width:160px; }
+  .note { font-size:12px; color:var(--warn); }
+  .chip { display:inline-block; font-size:11px; padding:1px 6px; border-radius:10px; background:#eceae5; color:var(--mute); }
+  .chip.bad { background:#fff1db; color:var(--warn); }
+  .empty { color:var(--mute); padding:40px; text-align:center; border:2px dashed var(--line); border-radius:10px; }
+  .drop { outline:3px dashed var(--accent); }
+  dialog { border:1px solid var(--line); border-radius:10px; width:min(560px, 92vw); }
+  dialog .row { padding:5px 8px; cursor:pointer; border-radius:4px; }
+  dialog .row:hover { background:#f0eee9; }
+  #msg { margin-left:auto; color:var(--mute); }
+  .warn { background:#fff1db; border:1px solid #f0d29a; padding:8px 12px; border-radius:6px; margin-bottom:10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><span>Ali</span>Express Reader</h1><span class="ver" id="ver"></span>
+  <button id="bOpen">📂 Open a PDF…</button>
+  <button id="bExport" class="main" disabled>💾 Export for Statement Teacher</button>
+  <span id="msg"></span>
+</header>
+<div class="wrap">
+  <aside><div style="font-size:12px;color:var(--mute);margin-bottom:6px">Opened PDFs</div><div id="docs"></div></aside>
+  <main id="main"><div class="empty">Print your AliExpress <b>Account → Orders</b> page to PDF, then<br>📂 Open it here, or drop the PDF on this page.</div></main>
+  <div id="side"><div style="color:var(--mute)">Click an order to see where it is on the page.</div></div>
+</div>
+<dialog id="dlg">
+  <div style="display:flex;gap:8px;align-items:center"><b id="dPath" style="flex:1;word-break:break-all"></b><button id="dUp">⬆ Up</button><button onclick="dlg.close()">✕</button></div>
+  <div id="dList" style="max-height:60vh;overflow:auto;margin-top:8px"></div>
+  <div style="margin-top:8px;font-size:12px;color:var(--mute)">Or pick from your computer: <input type="file" accept="application/pdf" id="fileIn"></div>
+</dialog>
+<script>
+const $ = s => document.querySelector(s);
+const money = c => c == null ? "—" : (c < 0 ? "−" : "") + "$" + (Math.abs(c) / 100).toLocaleString("en-NZ", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+let S = {doc: null, res: null, sel: null, folder: null, imgs: {}};
+const say = t => $("#msg").textContent = t;
+
+async function api(path, body) {
+  const r = await fetch(path, body === undefined ? {} : {method: "POST", body: body instanceof Blob ? body : JSON.stringify(body)});
+  const j = await r.json();
+  if (j.error) { say("⚠ " + j.error); throw new Error(j.error); }
+  return j;
+}
+
+async function loadDocs() {
+  const ds = await api("/api/docs");
+  $("#docs").innerHTML = ds.map(d => `<div class="doc ${d.id === S.doc ? "on" : ""}" data-id="${d.id}">${esc(d.name)}
+    <small>${d.orders ?? "?"} orders · ${money(d.total)}</small></div>`).join("") || '<small style="color:var(--mute)">none yet</small>';
+  document.querySelectorAll(".doc").forEach(el => el.onclick = () => openDoc(el.dataset.id));
+}
+
+async function openDoc(id) { S.doc = id; S.sel = null; S.imgs = {}; show(await api("/api/doc?id=" + id)); loadDocs(); }
+
+function show(res) {
+  S.res = res; S.doc = res.id;
+  $("#bExport").disabled = !res.orders.length;
+  const os = res.orders, dates = os.map(o => o.date).filter(Boolean).sort();
+  const total = os.reduce((a, o) => a + (o.total || 0), 0);
+  const notListed = os.filter(o => o.flags.includes("itemsnotlisted")).length;
+  const bad = os.filter(o => o.flags.some(f => f !== "itemsnotlisted")).length;
+  $("#main").innerHTML = (res.warnings || []).map(w => `<div class="warn">⚠ ${esc(w)}</div>`).join("") + `
+    <div class="sum">
+      <div class="tile"><small>Orders</small><b>${os.length}</b></div>
+      <div class="tile"><small>Total spent</small><b>${money(total)}</b><small>${esc(os[0]?.currency || "")}</small></div>
+      <div class="tile"><small>From – to</small><b style="font-size:14px">${dates[0] || "—"}<br>${dates.at(-1) || ""}</b></div>
+      <div class="tile"><small>Items not named</small><b>${notListed}</b><small>orders</small></div>
+      <div class="tile"><small>Need a look</small><b style="color:${bad ? "var(--warn)" : "var(--ok)"}">${bad}</b></div>
+    </div>
+    <table><colgroup><col style="width:100px"><col style="width:150px"><col style="width:140px"><col><col style="width:80px"><col style="width:72px"><col style="width:86px"></colgroup><thead><tr><th>Date</th><th>Order no.</th><th>Store</th><th>Items</th><th class="n">Items $</th><th class="n">Extra</th><th class="n">Total</th></tr></thead><tbody>
+    ${os.map((o, k) => `<tr class="o" data-k="${k}">
+      <td style="white-space:nowrap">${o.date}<br><span class="chip">${esc(o.status)}</span></td>
+      <td style="font-variant-numeric:tabular-nums">${esc(o.ref) || '<span class="chip bad">missing</span>'}</td>
+      <td class="store">${esc(o.store)}</td>
+      <td class="items">${o.items.map(i => `<div title="${esc(i.title)} ${esc(i.variant)}">${i.qty} × ${money(i.unitPrice)} · ${esc(i.title)}${i.variant ? ` <i>(${esc(i.variant)})</i>` : ""}</div>`).join("")
+        || '<span class="chip bad">not named on this page</span>'}
+        ${o.notes.filter(n => !/cut short|not named|more than the items/.test(n)).map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("")}</td>
+      <td class="n">${money(o.itemsTotal)}</td>
+      <td class="n" title="shipping, GST, fees (or discount if minus)">${o.extra == null ? "—" : money(o.extra)}</td>
+      <td class="n"><b>${money(o.total)}</b></td></tr>`).join("")}
+    </tbody></table>
+    <p style="color:var(--mute);font-size:12px">Extra = order total minus the items shown: shipping, GST and fees (minus = discount). Item names end with … where AliExpress cut them short.</p>`;
+  document.querySelectorAll("tr.o").forEach(tr => tr.onclick = () => pick(+tr.dataset.k));
+  say(`${res.file} · read ${res.read?.slice(0, 16).replace("T", " ") || ""}`);
+}
+
+async function pick(k) {
+  S.sel = k;
+  document.querySelectorAll("tr.o").forEach(tr => tr.classList.toggle("on", +tr.dataset.k === k));
+  const o = S.res.orders[k], b = o.box, p = b.page;
+  const img = S.imgs[p] || (S.imgs[p] = await new Promise(ok => { const i = new Image(); i.onload = () => ok(i); i.src = `/api/page?id=${S.doc}&p=${p}`; }));
+  const [pw, ph] = S.res.pageSizes[String(p)] || [595.276, 841.89];
+  const sc = img.naturalWidth / pw, y0 = Math.max(0, b.y0 * sc), y1 = Math.min(img.naturalHeight, b.y1 * sc);
+  const x0 = 0.22 * img.naturalWidth, w = 0.72 * img.naturalWidth;
+  $("#side").innerHTML = `<div style="margin-bottom:6px"><b>${esc(o.store)}</b><br><small>Order ${esc(o.ref)} · page ${p}</small></div><canvas></canvas>
+    <div style="margin-top:8px">${o.items.map(i => `<div style="margin:4px 0">${i.qty} × ${money(i.unitPrice)} = <b>${money(i.amount)}</b><br><small>${esc(i.title)} ${i.variant ? "· " + esc(i.variant) : ""}</small>
+      ${i.tags.map(t => `<span class="chip">${esc(t)}</span>`).join(" ")}</div>`).join("")}</div>
+    ${o.notes.map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("")}`;
+  const c = $("#side canvas"); c.width = w; c.height = y1 - y0;
+  c.getContext("2d").drawImage(img, x0, y0, w, y1 - y0, 0, 0, w, y1 - y0);
+}
+
+async function folder(path) {
+  const f = await api("/api/folder?path=" + encodeURIComponent(path || ""));
+  S.folder = f;
+  $("#dPath").textContent = f.folder;
+  $("#dList").innerHTML = f.dirs.map(d => `<div class="row" data-d="${esc(d)}">📁 ${esc(d)}</div>`).join("") +
+    f.pdfs.map(d => `<div class="row" data-p="${esc(d)}">📄 <b>${esc(d)}</b></div>`).join("");
+  document.querySelectorAll("#dList .row").forEach(r => r.onclick = async () => {
+    if (r.dataset.d) return folder(f.folder + "/" + r.dataset.d);
+    $("#dlg").close(); say("Reading…");
+    const res = await api("/api/open-path", {path: f.folder + "/" + r.dataset.p}); show(res); loadDocs();
+  });
+}
+async function upload(file) {
+  say("Reading…");
+  const res = await api("/api/upload?name=" + encodeURIComponent(file.name), file); show(res); loadDocs();
+}
+$("#bOpen").onclick = () => { folder(S.folder?.folder); $("#dlg").showModal(); };
+$("#dUp").onclick = () => folder(S.folder.parent);
+$("#fileIn").onchange = e => { $("#dlg").close(); if (e.target.files[0]) upload(e.target.files[0]); };
+$("#bExport").onclick = async () => {
+  const r = await api("/api/export", {id: S.doc});
+  say(`💾 ${r.count} orders saved to ${r.folder}`);
+};
+document.addEventListener("dragover", e => { e.preventDefault(); document.body.classList.add("drop"); });
+document.addEventListener("dragleave", () => document.body.classList.remove("drop"));
+document.addEventListener("drop", e => { e.preventDefault(); document.body.classList.remove("drop"); const f = e.dataTransfer.files[0]; if (f) upload(f); });
+api("/api/health").then(h => $("#ver").textContent = "v" + h.version);
+loadDocs();
+</script>
+</body>
+</html>

@@ -68,6 +68,7 @@
   <span class="tabs"><button id="tOrders" class="on">📋 Orders</button><button id="tCheck">✅ Checklist</button></span>
   <button id="bExport" class="main" disabled>💾 Export for Statement Teacher</button>
   <button id="bCsv" disabled title="One row per order — opens in a spreadsheet">⬇ CSV</button>
+  <button id="bTtr" disabled title="Send these orders to your TTR app (opens it in a new tab). Shift+click: change the TTR address">📤 Send to TTR</button>
   <button id="bXero" disabled title="Bills for Xero: import CSV or API JSON">⬇ Xero</button>
   <button id="bPdf" disabled title="A printable summary: totals, by month, every order">⬇ PDF summary</button>
   <span id="msg"></span>
@@ -119,7 +120,7 @@ async function openDoc(id) { S.doc = id; S.sel = null; S.imgs = {}; show(await a
 
 function show(res) {
   S.res = res; S.doc = res.id;
-  ["#bExport", "#bCsv", "#bPdf", "#bXero"].forEach(b => $(b).disabled = !res.orders.length);
+  ["#bExport", "#bCsv", "#bPdf", "#bXero", "#bTtr"].forEach(b => $(b).disabled = !res.orders.length);
   const os = res.orders, dates = os.map(o => o.date).filter(Boolean).sort();
   const total = os.reduce((a, o) => a + (o.flags.includes("cancelled") ? 0 : (o.total || 0)), 0);
   const notListed = os.filter(o => o.flags.includes("itemsnotlisted")).length;
@@ -206,6 +207,8 @@ loadDocs();
 <script type="module">
 // ✅ checklist (shared with the website tool: web/checklist.mjs), saved on this PC in data/tags.json
 import {createChecklist, backupFile, tagsFromBackup} from "/web/checklist.mjs";
+import {sendToTtr} from "/web/ttrsend.mjs";
+$("#bTtr").onclick = e => sendToTtr(S.res, say, e.shiftKey);
 const checklist = createChecklist({
   el: document.querySelector("#main"), getRes: () => S.res,
   extraButtons: '<button id="clBackup" title="Save the ticks, groups, jobs and staff tags, plus the item list, to a file (TTR: 📦 Inventory → AliExpress list → 📂 Import)">💾 Backup</button><button id="clRestore" title="Load a backup file">📂 Restore</button><input type="file" id="clRestoreIn" accept=".json,application/json" style="display:none">',
@@ -214,7 +217,7 @@ const checklist = createChecklist({
 });
 let view = "orders";
 const showOrders = window.show;
-window.show = res => { S.res = res; S.doc = res.id; ["#bExport", "#bCsv", "#bPdf", "#bXero"].forEach(b => $(b).disabled = !res.orders.length);
+window.show = res => { S.res = res; S.doc = res.id; ["#bExport", "#bCsv", "#bPdf", "#bXero", "#bTtr"].forEach(b => $(b).disabled = !res.orders.length);
   return view === "check" ? checklist.render() : showOrders(res); };
 function setView(v) {
   view = v;

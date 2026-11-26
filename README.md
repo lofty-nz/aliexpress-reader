@@ -31,6 +31,13 @@ Saved by order number + item, so they follow the item into later printouts: PC a
 store, item, option, qty, prices in cents, group). TTR loads that file: 📦 Inventory → **📦 AliExpress list** →
 📂 Import from AliExpress Reader, and the items are ticked off there. 📂 Restore puts back only the ticks/tags.
 
+## 📤 Send to TTR
+Both versions: **📤 Send to TTR** opens your TTR (default https://ttr.testtagrepair.co.nz; Shift+click to change it) in a
+new tab and hands over the orders read; TTR's 📥 Import AliExpress orders window opens with them (nothing is added until you
+press Import there). Tab-to-tab messages only (`web/ttrsend.mjs`): TTR says `ttr-ready` once loaded, the Reader sends
+`aliexpress-orders` to that exact address, TTR answers `ttr-got`. TTR only takes them from testtagrepair.co.nz or a
+127.0.0.1/localhost page. TTR is reachable only on your own devices (Tailscale), so it's for you, not website visitors.
+
 ## Xero
 ⬇ Xero → each paid order = one **Draft bill** from contact "AliExpress", invoice number = order number, date = due date =
 order date. Lines = items + a "Shipping, GST and fees" (or "Discount") line so each bill adds up to the card charge.

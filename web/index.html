@@ -130,8 +130,10 @@
     <button id="again">↺ Open another</button>
     <span class="tabs"><button id="tOrders" class="on">📋 Orders</button><button id="tCheck">✅ Checklist</button></span>
     <span class="file" id="fileName"></span>
+    <span id="ttrMsg" style="font-size:13px;color:var(--soft);flex-basis:100%;order:10"></span>
     <button id="bCsv" title="One row per order: opens in Excel, Numbers or Google Sheets">⬇ CSV</button>
     <button id="bItems" title="One row per item">⬇ Items CSV</button>
+    <button id="bTtr" title="Send these orders to your TTR app (opens it in a new tab). Shift+click: change the TTR address">📤 Send to TTR</button>
     <button id="bXero" title="Bills for Xero: import CSV or API JSON">⬇ Xero</button>
     <button id="bPdf" class="main" title="A printable page: totals, by month, every order">⬇ PDF summary</button>
   </header>
@@ -161,6 +163,7 @@ import {readPdf, ordersCsv, itemsCsv, spent} from "./reader.mjs";
 import {summaryPdf} from "./summary.mjs";
 import {xeroCsv, xeroJson} from "./xero.mjs";
 import {createChecklist, backupFile, tagsFromBackup} from "./checklist.mjs";
+import {sendToTtr, ttrUrl} from "./ttrsend.mjs";
 pdfjs.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).href;
 
 const $ = s => document.querySelector(s);
@@ -191,7 +194,7 @@ function show() {
   const res = S.res, os = res.orders;
   $("#start").classList.add("hidden"); $("#app").classList.remove("hidden");
   $("#fileName").textContent = res.file + " · " + res.pages + " page" + (res.pages > 1 ? "s" : "");
-  ["#bCsv", "#bItems", "#bPdf", "#bXero"].forEach(b => $(b).disabled = !os.length);
+  ["#bCsv", "#bItems", "#bPdf", "#bXero", "#bTtr"].forEach(b => $(b).disabled = !os.length);
   const dates = os.map(o => o.date).filter(Boolean).sort();
   const total = os.reduce((a, o) => a + spent(o), 0);
   const gone = os.filter(o => o.flags.includes("cancelled"));
@@ -283,6 +286,8 @@ function setView(v) {
   $("#app").classList.toggle("check", v === "check");
   show();
 }
+$("#bTtr").onclick = e => sendToTtr(S.res, t => $("#ttrMsg").textContent = t, e.shiftKey);
+$("#bTtr").title += " (now: " + ttrUrl() + ")";
 $("#tOrders").onclick = () => setView("orders");
 $("#tCheck").onclick = () => setView("check");
 $("#main").addEventListener("click", e => {

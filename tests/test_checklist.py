@@ -21,7 +21,9 @@ const res = JSON.parse(require("fs").readFileSync(process.argv[3], "utf8"));
 const names = JSON.parse(process.argv[4]);
 const tags = {...C.emptyTags(), items: {[C.checklistRows(res)[0].key]: {done: true, job: "1234", staff: "Sam"},
                                         [C.checklistRows(res)[1].key]: {group: "Stock"}}};
-console.log(JSON.stringify({groups: names.map(n => C.autoGroup(...n)), rows: C.checklistRows(res), csv: C.checklistCsv(res, tags)}));
+const backup = C.backupFile(res, tags);
+console.log(JSON.stringify({groups: names.map(n => C.autoGroup(...n)), rows: C.checklistRows(res), csv: C.checklistCsv(res, tags),
+  backup, restored: C.tagsFromBackup(JSON.parse(JSON.stringify(backup))), empty: C.backupFile(null, C.emptyTags())}));
 """
 
 
@@ -71,3 +73,16 @@ class Checklist(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+    def test_backup_carries_the_list(self):
+        res, out = self.run_js([])
+        b, rows = out["backup"], out["rows"]
+        self.assertEqual(b["app"], "aliexpress-reader")
+        self.assertEqual([x["key"] for x in b["list"]], [r["key"] for r in rows])
+        self.assertEqual(b["list"][1]["group"], "Stock")                     # a moved item keeps its group in the file
+        self.assertEqual(b["list"][2]["group"], rows[2]["auto"])
+        self.assertEqual(b["items"][rows[0]["key"]], {"done": True, "job": "1234", "staff": "Sam"})
+        self.assertNotIn("list", out["restored"])                           # 📂 Restore puts back only the ticks/tags
+        self.assertNotIn("app", out["restored"])
+        self.assertEqual(out["restored"]["items"], b["items"])
+        self.assertEqual(out["empty"]["list"], [])

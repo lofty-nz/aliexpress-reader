@@ -160,7 +160,7 @@ import * as pdfjs from "./vendor/pdf.min.mjs";
 import {readPdf, ordersCsv, itemsCsv, spent} from "./reader.mjs";
 import {summaryPdf} from "./summary.mjs";
 import {xeroCsv, xeroJson} from "./xero.mjs";
-import {createChecklist} from "./checklist.mjs";
+import {createChecklist, backupFile, tagsFromBackup} from "./checklist.mjs";
 pdfjs.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).href;
 
 const $ = s => document.querySelector(s);
@@ -275,7 +275,7 @@ const KEY = "aer-tags-v1";
 const checklist = createChecklist({
   el: $("#main"), getRes: () => S.res,
   store: {load: async () => JSON.parse(localStorage.getItem(KEY) || "null"), save: async t => localStorage.setItem(KEY, JSON.stringify(t))},
-  extraButtons: '<button id="clBackup" title="Save your ticks, groups, jobs and staff tags to a file">💾 Backup</button><button id="clRestore" title="Load a backup file">📂 Restore</button><input type="file" id="clRestoreIn" accept=".json,application/json" class="hidden">',
+  extraButtons: '<button id="clBackup" title="Save your ticks, groups, jobs and staff tags, plus the item list (for TTR), to a file">💾 Backup</button><button id="clRestore" title="Load a backup file">📂 Restore</button><input type="file" id="clRestoreIn" accept=".json,application/json" class="hidden">',
 });
 function setView(v) {
   view = v;
@@ -286,15 +286,14 @@ function setView(v) {
 $("#tOrders").onclick = () => setView("orders");
 $("#tCheck").onclick = () => setView("check");
 $("#main").addEventListener("click", e => {
-  if (e.target.id === "clBackup") download(new Blob([JSON.stringify(checklist.getTags(), null, 1)], {type: "application/json"}),
+  if (e.target.id === "clBackup") download(new Blob([JSON.stringify(backupFile(S.res, checklist.getTags()), null, 1)], {type: "application/json"}),
     `AliExpress checklist backup ${new Date().toISOString().slice(0, 10)}.json`);
   if (e.target.id === "clRestore") $("#clRestoreIn").click();
 });
 $("#main").addEventListener("change", async e => {
   if (e.target.id !== "clRestoreIn" || !e.target.files[0]) return;
   try {
-    const t = JSON.parse(await e.target.files[0].text());
-    if (!t || typeof t.items !== "object") throw new Error("not a checklist backup");
+    const t = tagsFromBackup(JSON.parse(await e.target.files[0].text()));
     if (confirm(`Replace the ticks and tags in this browser with the backup (${Object.keys(t.items).length} items)?`)) await checklist.replaceTags(t);
   } catch (err) { alert("Couldn't load that backup: " + err.message); }
 });

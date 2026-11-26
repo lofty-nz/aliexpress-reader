@@ -27,6 +27,9 @@ Phone/computer/AV, Appliance parts, Chickens & pets, Other; orders with unnamed 
 by dragging it onto a group; ＋ New group for your own. Filter by job, staff, search or hide ticked; ⬇ Checklist CSV.
 Saved by order number + item, so they follow the item into later printouts: PC app → `data/tags.json` (previous copy
 `tags.prev.json`); website → the visitor's browser, with 💾 Backup / 📂 Restore.
+**💾 Backup** (both versions) saves the ticks/tags **plus the item list** of the open printout (`list`: key, order, date,
+store, item, option, qty, prices in cents, group). TTR loads that file: 📦 Inventory → **📦 AliExpress list** →
+📂 Import from AliExpress Reader, and the items are ticked off there. 📂 Restore puts back only the ticks/tags.
 
 ## Xero
 ⬇ Xero → each paid order = one **Draft bill** from contact "AliExpress", invoice number = order number, date = due date =

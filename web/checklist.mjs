@@ -48,6 +48,22 @@ export const emptyTags = () => ({v: 1, items: {}, groups: [], staff: [], jobs: [
 
 export function groupOf(row, tags) { return tags.items[row.key]?.group || row.auto; }
 
+/** The 💾 Backup file: the ticks/tags (what 📂 Restore puts back) + `list`, every item of the open printout with its group,
+ *  so another app (TTR's 📦 Inventory → AliExpress list) can load the whole list and tick it off. Money in cents. */
+export function backupFile(res, tags) {
+  const list = res ? checklistRows(res).map(r => ({key: r.key, ref: r.ref, date: r.date, store: r.store, status: r.status,
+    cancelled: r.cancelled, title: r.title, variant: r.variant, qty: r.qty, unitPrice: r.unitPrice, amount: r.amount,
+    currency: r.currency, group: groupOf(r, tags)})) : [];
+  return {...tags, app: "aliexpress-reader", savedAt: new Date().toISOString(), list};
+}
+
+/** A backup file read back: just the ticks/tags part (the `list` and labels are left out). */
+export function tagsFromBackup(b) {
+  if (!b || typeof b.items !== "object") throw new Error("not a checklist backup");
+  const {list, app, savedAt, ...t} = b;
+  return t;
+}
+
 /** Checklist as CSV (one row per item, with group, tick, job and staff). */
 export function checklistCsv(res, tags) {
   const q = v => { const s = String(v ?? ""); return /[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };

@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 LAYOUT = "AliExpress orders list"
 
 MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
@@ -33,11 +33,15 @@ PRICE_RE = re.compile(r"^" + CUR + r"\s?" + NUM + r"\s*[x×]\s*(?P<q>\d+)$")
 BUTTONS = re.compile(r"^(Details|Copy|Write a review|Add to cart|Remove|Need help\?|Buy (it )?again|Track order|Confirm received|"
                      r"Pay now|Delete|Cancel order|Return/refund|Open dispute|Add review|View details|Contact (the )?seller)$", re.I)
 # small print under an item: kept as the item's tags, never an item
-TAG_RE = re.compile(r"(coupon if delayed|free returns|free shipping|choice|bundle deals?|delivery guarantee|price adjustment|"
+TAG_RE = re.compile(r"(coupon if delayed|for delivery issue|free returns|free shipping|choice|bundle deals?|delivery guarantee|price adjustment|"
                     r"fast delivery|\d+-day delivery|refund if|plus\b)", re.I)
 STATUSES = ("Completed", "Awaiting delivery", "Awaiting shipment", "Shipped", "Processing", "Processed", "To pay", "Closed",
             "Cancelled", "Canceled", "Refunded", "Order closed", "Awaiting payment", "In transit", "Delivered", "Finished",
-            "To ship", "To receive", "Refund in progress", "Dispute in progress")
+            "To ship", "To receive", "Refund in progress", "Dispute in progress", "Expired")
+# AliExpress's own suggestions grid and the page footer come after the last order: never part of an order
+END_RE = re.compile(r"^(More to love|You may also like|Recommended for you|Recommended)$|All rights reserved", re.I)
+REFUND_RE = re.compile(r"refund", re.I)
+NOT_SPENT = re.compile(r"^(cancell?ed|closed|order closed|refunded|expired)$", re.I)   # shown, but never counted as money spent
 PAGE_GAP = 10000.0   # pages are stacked into one long strip so an order split over a page break stays whole
 
 
@@ -102,6 +106,9 @@ def columns(lines):
 def read_lines(lines):
     """Text lines (from pdf_lines or made up in tests) -> list of orders, newest first as printed."""
     lines = sorted(lines, key=lambda ln: (ln["y"], ln["x0"]))
+    end = next((ln["y"] for ln in lines if END_RE.search(ln["text"])), None)
+    if end is not None:
+        lines = [ln for ln in lines if ln["y"] < end - 2]
     cols = columns(lines)
     starts = [i for i, ln in enumerate(lines) if DATE_RE.match(ln["text"])]
     orders = []
@@ -117,8 +124,9 @@ def read_order(block, date_line, cols):
     d = DATE_RE.match(date_line["text"])
     o = {"ref": "", "date": iso(*d.groups()), "dateText": date_line["text"][5:].strip(), "status": "", "store": "",
          "currency": "", "total": None, "items": [], "itemsTotal": None, "extra": None, "page": date_line["page"],
-         "pages": sorted({ln["page"] for ln in block}), "box": None, "flags": [], "notes": []}
+         "pages": sorted({ln["page"] for ln in block}), "box": None, "flags": [], "notes": [], "refund": ""}
     body = []
+    details = next((ln for ln in block if ln["text"] == "Details"), None)
     for ln in block:
         left, right = cols[ln["page"]]
         t = ln["text"]
@@ -132,8 +140,12 @@ def read_order(block, date_line, cols):
         if m and o["total"] is None:
             o["currency"], o["total"] = money(m["cur"], m["n"])
             continue
-        if any(t.lower() == s.lower() for s in STATUSES) and not o["status"]:
+        if not o["status"] and (any(t.lower() == s.lower() for s in STATUSES) or (   # a status AliExpress adds later: by position
+                details and ln["page"] == details["page"] and abs(ln["y0"] - details["y0"]) < 6 and left - 5 <= ln["x0"] < left + 10 and len(t) < 30)):
             o["status"] = t
+            continue
+        if REFUND_RE.search(t) and left - 5 <= ln["x0"] < right - 5:
+            o["refund"] = (o["refund"] + " " + t).strip()
             continue
         if ln["x0"] < left - 5 or ln["x0"] >= right - 5 or BUTTONS.match(t):
             continue                                 # side menu, right-hand column, buttons
@@ -167,8 +179,19 @@ def read_order(block, date_line, cols):
     return o
 
 
+def spent(o):
+    """The order's money that counts as spent (cents): 0 for cancelled/closed/refunded orders."""
+    return 0 if "cancelled" in o["flags"] else (o["total"] or 0)
+
+
 def check(o):
     """Flags (machine words) + notes (plain words) for things worth a look."""
+    if NOT_SPENT.match(o["status"] or ""):
+        o["flags"].append("cancelled")
+        o["notes"].append(f"{o['status'].lower()} — not counted in the totals")
+    if o["refund"]:
+        o["flags"].append("refund")
+        o["notes"].append("refund: " + o["refund"] + ("" if "cancelled" in o["flags"] else " — total still counted, check the refund on the statement"))
     if not o["ref"]:
         o["flags"].append("noref")
         o["notes"].append("no order number found")
@@ -256,14 +279,15 @@ def order_doc(o, res):
 def list_doc(res):
     """The whole printed list as one statement-like document: one money-out Line per order (amount negative)."""
     lines = [{"page": o["page"], "date": o["date"], "text": order_text(o), "accts": [],
-              "amount": None if o["total"] is None else -o["total"], "balance": None, "kind": "txn",
+              "amount": None if o["total"] is None or "cancelled" in o["flags"] else -o["total"], "balance": None,
+              "kind": "cancelled" if "cancelled" in o["flags"] else "txn",
               "flags": [f for f in o["flags"] if f != "itemsnotlisted"], "ref": o["ref"], "orderRef": o["ref"]} for o in res["orders"]]
     dates = sorted(o["date"] for o in res["orders"] if o["date"])
     return {"file": res["file"], "documentId": "aliexpress-list-" + _safe(Path(res["file"]).stem), "approved": False, "group": "AliExpress",
             "layout": LAYOUT, "docType": "orders", "case": {},
             "fields": {"periodFrom": {"label": "First order", "value": dates[0] if dates else None, "text": dates[0] if dates else "", "how": "aliexpress"},
                        "periodTo": {"label": "Last order", "value": dates[-1] if dates else None, "text": dates[-1] if dates else "", "how": "aliexpress"}},
-            "facts": {"total": sum(o["total"] or 0 for o in res["orders"]), "date": dates[-1] if dates else "", "issuer": "AliExpress",
+            "facts": {"total": sum(spent(o) for o in res["orders"]), "date": dates[-1] if dates else "", "issuer": "AliExpress",
                       "layout": LAYOUT, "orders": len(res["orders"])},
             "accounts": [], "check": {"ok": None, "lines": len(lines)}, "lines": lines,
             "readers": [{"page": p, "tags": ["text"]} for p in range(1, res["pages"] + 1)],
@@ -346,7 +370,7 @@ def main(argv):
             print("      ! " + nt)
     for w in res["warnings"]:
         print("WARNING: " + w)
-    print(f"{len(res['orders'])} orders, total {cents(sum(o['total'] or 0 for o in res['orders']))}")
+    print(f"{len(res['orders'])} orders, total spent {cents(sum(spent(o) for o in res['orders']))}")
     return 0
 
 

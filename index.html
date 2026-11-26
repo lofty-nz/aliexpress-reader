@@ -15,7 +15,7 @@
   button { font:inherit; padding:6px 12px; border:1px solid var(--line); background:var(--card); border-radius:6px; cursor:pointer; }
   button.main { background:var(--accent); color:#fff; border-color:var(--accent); }
   button:disabled { opacity:.5; cursor:default; }
-  .wrap { display:grid; grid-template-columns:200px minmax(0,1fr) 440px; height:calc(100vh - 51px); }
+  .wrap { display:grid; grid-template-columns:190px minmax(0,1fr) minmax(300px, 28vw); height:calc(100vh - 51px); }
   aside, main, #side { overflow:auto; }
   aside { border-right:1px solid var(--line); padding:10px; }
   aside .doc { padding:8px; border-radius:6px; cursor:pointer; margin-bottom:4px; }
@@ -56,6 +56,8 @@
   <h1><span>Ali</span>Express Reader</h1><span class="ver" id="ver"></span>
   <button id="bOpen">📂 Open a PDF…</button>
   <button id="bExport" class="main" disabled>💾 Export for Statement Teacher</button>
+  <button id="bCsv" disabled title="One row per order — opens in a spreadsheet">⬇ CSV</button>
+  <button id="bPdf" disabled title="A printable summary: totals, by month, every order">⬇ PDF summary</button>
   <span id="msg"></span>
 </header>
 <div class="wrap">
@@ -93,11 +95,11 @@ async function openDoc(id) { S.doc = id; S.sel = null; S.imgs = {}; show(await a
 
 function show(res) {
   S.res = res; S.doc = res.id;
-  $("#bExport").disabled = !res.orders.length;
+  ["#bExport", "#bCsv", "#bPdf"].forEach(b => $(b).disabled = !res.orders.length);
   const os = res.orders, dates = os.map(o => o.date).filter(Boolean).sort();
-  const total = os.reduce((a, o) => a + (o.total || 0), 0);
+  const total = os.reduce((a, o) => a + (o.flags.includes("cancelled") ? 0 : (o.total || 0)), 0);
   const notListed = os.filter(o => o.flags.includes("itemsnotlisted")).length;
-  const bad = os.filter(o => o.flags.some(f => f !== "itemsnotlisted")).length;
+  const bad = os.filter(o => o.flags.some(f => !["itemsnotlisted", "cancelled"].includes(f))).length;
   $("#main").innerHTML = (res.warnings || []).map(w => `<div class="warn">⚠ ${esc(w)}</div>`).join("") + `
     <div class="sum">
       <div class="tile"><small>Orders</small><b>${os.length}</b></div>
@@ -116,7 +118,7 @@ function show(res) {
         ${o.notes.filter(n => !/cut short|not named|more than the items/.test(n)).map(n => `<div class="note">⚠ ${esc(n)}</div>`).join("")}</td>
       <td class="n">${money(o.itemsTotal)}</td>
       <td class="n" title="shipping, GST, fees (or discount if minus)">${o.extra == null ? "—" : money(o.extra)}</td>
-      <td class="n"><b>${money(o.total)}</b></td></tr>`).join("")}
+      <td class="n">${o.flags.includes("cancelled") ? `<s style="color:var(--mute)" title="not counted">${money(o.total)}</s>` : `<b>${money(o.total)}</b>`}</td></tr>`).join("")}
     </tbody></table>
     <p style="color:var(--mute);font-size:12px">Extra = order total minus the items shown: shipping, GST and fees (minus = discount). Item names end with … where AliExpress cut them short.</p>`;
   document.querySelectorAll("tr.o").forEach(tr => tr.onclick = () => pick(+tr.dataset.k));
@@ -158,6 +160,8 @@ async function upload(file) {
 $("#bOpen").onclick = () => { folder(S.folder?.folder); $("#dlg").showModal(); };
 $("#dUp").onclick = () => folder(S.folder.parent);
 $("#fileIn").onchange = e => { $("#dlg").close(); if (e.target.files[0]) upload(e.target.files[0]); };
+$("#bCsv").onclick = () => location.href = "/api/csv?id=" + S.doc;
+$("#bPdf").onclick = () => location.href = "/api/pdf?id=" + S.doc;
 $("#bExport").onclick = async () => {
   const r = await api("/api/export", {id: S.doc});
   say(`💾 ${r.count} orders saved to ${r.folder}`);

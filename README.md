@@ -1,12 +1,15 @@
 # AliExpress Reader
 
+![AliExpress Reader](docs/hero.png)
+
 Pulls the orders out of a printed AliExpress **Orders** page and saves them in the same shapes Statement Teacher
 exports, so Statement Teacher / Money Trail can take them in later.
 
 ## Use
 1. On AliExpress: Account → **Orders** → scroll down until every order you want has loaded → Ctrl+P → **Save as PDF**.
 2. `./start.sh`, open http://127.0.0.1:8835 → 📂 Open a PDF (or drop it on the page).
-3. Click an order to see its spot on the page. **💾 Export for Statement Teacher** → `~/Documents/AliExpress Reader exports/<name> <date>/`.
+3. Click an order to see its spot on the page. **⬇ CSV** = one row per order (opens in a spreadsheet); **⬇ PDF summary** =
+   a printable page: totals, by month, every order. **💾 Export for Statement Teacher** → `~/Documents/AliExpress Reader exports/<name> <date>/`.
 
 Command line: `python3 reader.py file.pdf` (print) · `--json` · `--export DIR`.
 
@@ -14,9 +17,11 @@ Command line: `python3 reader.py file.pdf` (print) · `--json` · `--export DIR`
 Per order: date, order number (Ref. Number), status, store, total (+ currency), and each item shown: name (as cut
 short by AliExpress, ends with …), option, unit price × qty, small print (coupon / free returns).
 **Extra** = total − items shown = shipping, GST, fees (minus = discount).
+**Cancelled / Closed / Refunded / Expired** orders are listed but left out of every total. Refund lines ("Refund complete…")
+are kept with the order and flagged. AliExpress's "More to love" suggestions after the last order are ignored.
 Orders with several items show **no item names** on the Orders page → flagged `itemsnotlisted`; the total is still right.
 
-No OCR and no AI: word positions from poppler `pdftotext -bbox-layout`. The side menu (left of the status column)
+Needs: Python 3, poppler-utils (`pdftotext`, `pdftoppm`), pycairo (`python3-cairo`). No OCR and no AI: word positions from poppler `pdftotext -bbox-layout`. The side menu (left of the status column)
 and the Total/buttons column are kept out by position.
 
 ## Export files (money in cents in .json, dollars in .csv, dates YYYY-MM-DD)
@@ -29,5 +34,5 @@ and the Total/buttons column are kept out by position.
 
 ## Files
 `reader.py` (reader + export, stdlib) · `server.py` (web page, 127.0.0.1:8835; env ALIEXPRESS_READER_DATA / _PORT /
-_EXPORTS) · `index.html` · `data/` (opened PDFs — private, git-ignored) · `tests/` (made-up orders only):
+_EXPORTS) · `index.html` · `data/` (opened PDFs — private, git-ignored) · `summary.py` (CSV + PDF summary, pycairo) · `tests/` (made-up orders only; `tests/make_sample.py` draws a made-up Orders PDF):
 `python3 -m unittest discover -s tests`.

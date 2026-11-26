@@ -96,5 +96,24 @@ class ReaderTest(unittest.TestCase):
             self.assertTrue(inv["check"]["ok"])
 
 
+    def test_unknown_status_refund_and_suggestions_grid(self):
+        lines = SIDEBAR + [L(1, 44, 175, "Returns/refunds")] + \
+            order(1, 155, "Apr 28, 2026", "2222333344445555", "Hoiho Store", "8.02",
+                  [("Made-up Cable …", "Black 0.5m", "NZ$ 6.98 x1")], status="Awaiting pickup") + \
+            [L(1, 206, 260, "Collect NZ$2 for delivery issue"), L(1, 154, 280, "Refund complete")] + \
+            order(1, 320, "Apr 20, 2026", "2222333344446666", "Takahe Store", "5.00",
+                  [("Made-up Fuse", "", "NZ$ 5.00 x1")], status="Expired") + \
+            [L(1, 140, 520, "More to love"), L(1, 206, 540, "Made-up Gadget"), L(1, 206, 556, "NZ$ 12.99"), L(1, 206, 570, "1K+ sold"),
+             L(1, 206, 600, "2026 AliExpress.com. All rights reserved.")]
+        a, b = reader.read_lines(lines)
+        self.assertEqual(a["status"], "Awaiting pickup")                       # unknown status found by position
+        self.assertIn("Collect NZ$2 for delivery issue", a["items"][0]["tags"])
+        self.assertEqual(a["refund"], "Refund complete")
+        self.assertIn("refund", a["flags"])
+        self.assertEqual((b["status"], reader.spent(b)), ("Expired", 0))
+        self.assertEqual(len(b["items"]), 1)                                   # suggestions grid not added to the last order
+        self.assertFalse(any("without a price" in n for n in b["notes"]))
+
+
 if __name__ == "__main__":
     unittest.main()

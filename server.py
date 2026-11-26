@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import reader
+import summary
 
 HERE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("ALIEXPRESS_READER_DATA", str(HERE / "data")))
@@ -63,7 +64,7 @@ def docs():
         r = m.parent / "read.json"
         if r.exists():
             res = json.loads(r.read_text(encoding="utf-8"))
-            meta.update(orders=len(res["orders"]), total=sum(o["total"] or 0 for o in res["orders"]))
+            meta.update(orders=len(res["orders"]), total=sum(reader.spent(o) for o in res["orders"]))
         out.append(meta)
     return out
 
@@ -97,7 +98,7 @@ class H(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
-    def send(self, code, body, ctype="application/json"):
+    def send(self, code, body, ctype="application/json", download=None):
         if isinstance(body, (dict, list)):
             body = json.dumps(body, ensure_ascii=False).encode()
         elif isinstance(body, str):
@@ -106,6 +107,9 @@ class H(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
         self.send_header("Cache-Control", "no-store")
+        if download:
+            from urllib.parse import quote
+            self.send_header("Content-Disposition", f"attachment; filename*=UTF-8''{quote(download)}")
         self.end_headers()
         self.wfile.write(body)
 
@@ -124,6 +128,17 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, json.loads(r.read_text(encoding="utf-8")) if r.exists() else read_doc(q["id"]))
             if u.path == "/api/page":
                 return self.send(200, page_png(q["id"], q.get("p", 1)), "image/png")
+            if u.path in ("/api/csv", "/api/pdf"):
+                res = json.loads((doc_path(q["id"]) / "read.json").read_text(encoding="utf-8"))
+                stem = reader._safe(f"AliExpress orders - {Path(res['file']).stem}")
+                if u.path == "/api/csv":
+                    body, ctype, ext = summary.orders_csv(res).encode("utf-8"), "text/csv; charset=utf-8", "csv"
+                else:
+                    import io
+                    buf = io.BytesIO()
+                    summary.summary_pdf(res, buf)
+                    body, ctype, ext = buf.getvalue(), "application/pdf", "pdf"
+                return self.send(200, body, ctype, f"{stem}.{ext}")
             if u.path == "/api/folder":
                 return self.send(200, folder_pdfs(q.get("path") or str(Path.home() / "Sandbox")))
         except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as e:

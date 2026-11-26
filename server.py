@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlparse
 
 import reader
 import summary
+import xero
 
 HERE = Path(__file__).resolve().parent
 DATA = Path(os.environ.get("ALIEXPRESS_READER_DATA", str(HERE / "data")))
@@ -128,6 +129,12 @@ class H(BaseHTTPRequestHandler):
                 return self.send(200, json.loads(r.read_text(encoding="utf-8")) if r.exists() else read_doc(q["id"]))
             if u.path == "/api/page":
                 return self.send(200, page_png(q["id"], q.get("p", 1)), "image/png")
+            if u.path in ("/api/xero-csv", "/api/xero-json"):
+                res = json.loads((doc_path(q["id"]) / "read.json").read_text(encoding="utf-8"))
+                stem = reader._safe(f"Xero bills - AliExpress - {Path(res['file']).stem}")
+                if u.path == "/api/xero-csv":
+                    return self.send(200, xero.xero_csv(res, q).encode("utf-8"), "text/csv; charset=utf-8", stem + ".csv")
+                return self.send(200, xero.xero_json(res, q).encode("utf-8"), "application/json", stem + " (API).json")
             if u.path in ("/api/csv", "/api/pdf"):
                 res = json.loads((doc_path(q["id"]) / "read.json").read_text(encoding="utf-8"))
                 stem = reader._safe(f"AliExpress orders - {Path(res['file']).stem}")

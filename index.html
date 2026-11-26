@@ -49,6 +49,12 @@
   dialog .row:hover { background:#f0eee9; }
   #msg { margin-left:auto; color:var(--mute); }
   .warn { background:#fff1db; border:1px solid #f0d29a; padding:8px 12px; border-radius:6px; margin-bottom:10px; }
+  dialog#xdlg { border:1px solid var(--line, #ccc); border-radius:12px; width:min(520px, 94vw); padding:18px; }
+  dialog#xdlg label { display:block; margin:10px 0; font-size:14px; }
+  dialog#xdlg input, dialog#xdlg select { display:block; margin-top:4px; padding:6px 8px; border-radius:7px; border:1px solid var(--line, #ccc); width:100%; }
+  dialog#xdlg input#xAccount { width:110px; display:inline-block; }
+  dialog#xdlg small, .xsub { color:var(--mute, var(--faint, #777)); font-size:12.5px; }
+  .xbtns { display:flex; gap:8px; flex-wrap:wrap; margin-top:12px; }
 </style>
 </head>
 <body>
@@ -57,6 +63,7 @@
   <button id="bOpen">📂 Open a PDF…</button>
   <button id="bExport" class="main" disabled>💾 Export for Statement Teacher</button>
   <button id="bCsv" disabled title="One row per order — opens in a spreadsheet">⬇ CSV</button>
+  <button id="bXero" disabled title="Bills for Xero: import CSV or API JSON">⬇ Xero</button>
   <button id="bPdf" disabled title="A printable summary: totals, by month, every order">⬇ PDF summary</button>
   <span id="msg"></span>
 </header>
@@ -65,6 +72,18 @@
   <main id="main"><div class="empty">Print your AliExpress <b>Account → Orders</b> page to PDF, then<br>📂 Open it here, or drop the PDF on this page.</div></main>
   <div id="side"><div style="color:var(--mute)">Click an order to see where it is on the page.</div></div>
 </div>
+<dialog id="xdlg">
+  <h3 style="margin:0 0 4px">⬇ Export to Xero</h3>
+  <div class="xsub">Each paid order becomes one <b>bill</b> (Draft) from your supplier, numbered with the AliExpress order number.
+  Cancelled and expired orders are left out. Lines add up to exactly what your card was charged.</div>
+  <label>Supplier (contact) name <input id="xContact" value="AliExpress"></label>
+  <label>Account code <input id="xAccount" value="300" size="6"> <small>e.g. 300 Purchases, 429 General Expenses</small></label>
+  <label>GST <select id="xTax"><option value="none">No GST (usual for AliExpress: GST they charge can't be claimed)</option>
+    <option value="gst">GST on Expenses 15% (amounts include GST)</option></select></label>
+  <div class="xbtns"><button class="main" id="xCsv">Bills CSV (Xero import)</button><button id="xJson">Xero API (JSON)</button><button id="xClose">Close</button></div>
+  <div class="xsub" style="margin-top:10px">CSV: in Xero go to <i>Business → Bills to pay → Import</i>, choose the file, and pick
+  <i>tax inclusive</i> if you chose GST. JSON: the body for <code>POST /api.xro/2.0/Invoices</code> on the Xero API.</div>
+</dialog>
 <dialog id="dlg">
   <div style="display:flex;gap:8px;align-items:center"><b id="dPath" style="flex:1;word-break:break-all"></b><button id="dUp">⬆ Up</button><button onclick="dlg.close()">✕</button></div>
   <div id="dList" style="max-height:60vh;overflow:auto;margin-top:8px"></div>
@@ -95,7 +114,7 @@ async function openDoc(id) { S.doc = id; S.sel = null; S.imgs = {}; show(await a
 
 function show(res) {
   S.res = res; S.doc = res.id;
-  ["#bExport", "#bCsv", "#bPdf"].forEach(b => $(b).disabled = !res.orders.length);
+  ["#bExport", "#bCsv", "#bPdf", "#bXero"].forEach(b => $(b).disabled = !res.orders.length);
   const os = res.orders, dates = os.map(o => o.date).filter(Boolean).sort();
   const total = os.reduce((a, o) => a + (o.flags.includes("cancelled") ? 0 : (o.total || 0)), 0);
   const notListed = os.filter(o => o.flags.includes("itemsnotlisted")).length;
@@ -160,6 +179,13 @@ async function upload(file) {
 $("#bOpen").onclick = () => { folder(S.folder?.folder); $("#dlg").showModal(); };
 $("#dUp").onclick = () => folder(S.folder.parent);
 $("#fileIn").onchange = e => { $("#dlg").close(); if (e.target.files[0]) upload(e.target.files[0]); };
+const xo = () => ({contact: $("#xContact").value.trim(), account: $("#xAccount").value.trim(), tax: $("#xTax").value});
+["xContact", "xAccount", "xTax"].forEach(id => { const v = localStorage.getItem("aer-" + id); if (v) $("#" + id).value = v;
+  $("#" + id).onchange = e => localStorage.setItem("aer-" + id, e.target.value); });
+$("#bXero").onclick = () => $("#xdlg").showModal();
+$("#xClose").onclick = () => $("#xdlg").close();
+$("#xCsv").onclick = () => location.href = "/api/xero-csv?id=" + S.doc + "&" + new URLSearchParams(xo());
+$("#xJson").onclick = () => location.href = "/api/xero-json?id=" + S.doc + "&" + new URLSearchParams(xo());
 $("#bCsv").onclick = () => location.href = "/api/csv?id=" + S.doc;
 $("#bPdf").onclick = () => location.href = "/api/pdf?id=" + S.doc;
 $("#bExport").onclick = async () => {

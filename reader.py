@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 LAYOUT = "AliExpress orders list"
 
 MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
@@ -55,12 +55,33 @@ def pdf_lines(path):
     out = subprocess.run(["pdftotext", "-bbox-layout", str(path), "-"], capture_output=True, text=True, check=True).stdout
     lines = []
     for pno, page in enumerate(re.findall(r"<page\b.*?</page>", out, re.S), 1):
-        for m in re.finditer(r'<line xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">(.*?)</line>', page, re.S):
-            words = [unicodedata.normalize("NFKC", html.unescape(w)).replace("...", "…") for w in re.findall(r">([^<]*)</word>", m.group(5))]
-            text = " ".join(w for w in words if w).strip()
-            if text:
-                x0, y0, x1, y1 = (float(m.group(i)) for i in range(1, 5))
-                lines.append({"page": pno, "x0": x0, "y0": y0, "x1": x1, "y1": y1, "y": (pno - 1) * PAGE_GAP + y0, "text": text})
+        for m in re.finditer(r"<line\b[^>]*>(.*?)</line>", page, re.S):
+            seg = None                                 # split a line where words are far apart (e.g. "Need help?" + "Date: …")
+            for wm in re.finditer(r'<word xMin="([\d.]+)" yMin="([\d.]+)" xMax="([\d.]+)" yMax="([\d.]+)">([^<]*)</word>', m.group(1)):
+                x0, y0, x1, y1 = (float(wm.group(i)) for i in range(1, 5))
+                w = unicodedata.normalize("NFKC", html.unescape(wm.group(5))).replace("...", "…")
+                if not w:
+                    continue
+                if seg and x0 - seg["x1"] <= (y1 - y0) * 2.0:
+                    seg.update(x1=x1, y0=min(seg["y0"], y0), y1=max(seg["y1"], y1), text=seg["text"] + " " + w)
+                    continue
+                if seg:
+                    lines.append(seg)
+                seg = {"page": pno, "x0": x0, "y0": y0, "x1": x1, "y1": y1, "text": w}
+            if seg:
+                lines.append(seg)
+    joined = []                                        # pieces on the same baseline, close together = one line ("Date: Mar" + "26, 2026")
+    for ln in sorted(lines, key=lambda l: (l["page"], round(l["y1"], 1), l["x0"])):
+        prev = next((j for j in reversed(joined[-6:]) if j["page"] == ln["page"] and abs(j["y1"] - ln["y1"]) < 1.5
+                     and 0 <= ln["x0"] - j["x1"] <= (ln["y1"] - ln["y0"]) * 2.0), None)
+        if prev:
+            prev.update(x1=ln["x1"], y0=min(prev["y0"], ln["y0"]), text=prev["text"] + " " + ln["text"])
+        else:
+            joined.append(dict(ln))
+    lines = joined
+    for ln in lines:
+        ln["text"] = ln["text"].strip()
+        ln["y"] = (ln["page"] - 1) * PAGE_GAP + ln["y0"]
     return lines
 
 

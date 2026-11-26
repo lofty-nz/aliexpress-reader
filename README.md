@@ -13,6 +13,19 @@ exports, so Statement Teacher / Money Trail can take them in later.
 
 Command line: `python3 reader.py file.pdf` (print) · `--json` · `--export DIR`.
 
+## Two versions
+- **Website tool** (`web/`): runs in the browser, the PDF is never uploaded. Live at testtagrepair.co.nz/aliexpress-reader
+  (copied into the website's `public/tools/aliexpress-reader/`). pdf.js + jsPDF bundled in `web/vendor/` (Apache-2.0 / MIT).
+  Same rules as the Python reader: `tests/test_xero_and_web.py` checks both give the same answers.
+- **PC app** (`server.py`, :8835): the same, plus the Statement Teacher export.
+
+## Xero
+⬇ Xero → each paid order = one **Draft bill** from contact "AliExpress", invoice number = order number, date = due date =
+order date. Lines = items + a "Shipping, GST and fees" (or "Discount") line so each bill adds up to the card charge.
+Cancelled/expired orders are left out. Settings: contact name, account code (default 300), GST (default No GST; or
+GST on Expenses, tax inclusive). **Bills CSV** = Xero's bill import (Business → Bills to pay → Import); check the columns
+against Xero's own template the first time. **Xero API (JSON)** = body for `POST /api.xro/2.0/Invoices` (Type ACCPAY).
+
 ## What it reads
 Per order: date, order number (Ref. Number), status, store, total (+ currency), and each item shown: name (as cut
 short by AliExpress, ends with …), option, unit price × qty, small print (coupon / free returns).

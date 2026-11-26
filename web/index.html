@@ -71,6 +71,10 @@
   aside .sub { color:var(--faint); font-size:12.5px; margin-bottom:8px; }
   aside .it { margin:8px 0; font-size:14px; }
   aside .it small { color:var(--soft); display:block; }
+  .tabs { display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; }
+  .tabs button { border:0; border-radius:0; background:transparent; }
+  .tabs button.on { background:var(--accent); color:var(--accent-ink); font-weight:700; }
+  #app.check .wrap { grid-template-columns:1fr; } #app.check aside { display:none; }
   .busy { position:fixed; inset:0; background:#0009; display:flex; align-items:center; justify-content:center; font-size:18px; z-index:9; }
 
   @media (max-width: 760px) {
@@ -124,6 +128,7 @@
 <section id="app" class="hidden">
   <header>
     <button id="again">↺ Open another</button>
+    <span class="tabs"><button id="tOrders" class="on">📋 Orders</button><button id="tCheck">✅ Checklist</button></span>
     <span class="file" id="fileName"></span>
     <button id="bCsv" title="One row per order: opens in Excel, Numbers or Google Sheets">⬇ CSV</button>
     <button id="bItems" title="One row per item">⬇ Items CSV</button>
@@ -155,6 +160,7 @@ import * as pdfjs from "./vendor/pdf.min.mjs";
 import {readPdf, ordersCsv, itemsCsv, spent} from "./reader.mjs";
 import {summaryPdf} from "./summary.mjs";
 import {xeroCsv, xeroJson} from "./xero.mjs";
+import {createChecklist} from "./checklist.mjs";
 pdfjs.GlobalWorkerOptions.workerSrc = new URL("./vendor/pdf.worker.min.mjs", import.meta.url).href;
 
 const $ = s => document.querySelector(s);
@@ -179,7 +185,9 @@ async function open(bytes, name) {
 }
 const openFile = async f => f && open(new Uint8Array(await f.arrayBuffer()), f.name);
 
+let view = "orders";
 function show() {
+  if (view === "check") return checklist.render();
   const res = S.res, os = res.orders;
   $("#start").classList.add("hidden"); $("#app").classList.remove("hidden");
   $("#fileName").textContent = res.file + " · " + res.pages + " page" + (res.pages > 1 ? "s" : "");
@@ -262,6 +270,34 @@ $("#example").onclick = async () => open(new Uint8Array(await (await fetch("exam
 const drop = $("#drop");
 document.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
 document.addEventListener("dragleave", e => { if (!e.relatedTarget) drop.classList.remove("over"); });
+// ✅ checklist: ticks, groups, job numbers and staff tags saved in this browser (with a backup file)
+const KEY = "aer-tags-v1";
+const checklist = createChecklist({
+  el: $("#main"), getRes: () => S.res,
+  store: {load: async () => JSON.parse(localStorage.getItem(KEY) || "null"), save: async t => localStorage.setItem(KEY, JSON.stringify(t))},
+  extraButtons: '<button id="clBackup" title="Save your ticks, groups, jobs and staff tags to a file">💾 Backup</button><button id="clRestore" title="Load a backup file">📂 Restore</button><input type="file" id="clRestoreIn" accept=".json,application/json" class="hidden">',
+});
+function setView(v) {
+  view = v;
+  $("#tOrders").classList.toggle("on", v === "orders"); $("#tCheck").classList.toggle("on", v === "check");
+  $("#app").classList.toggle("check", v === "check");
+  show();
+}
+$("#tOrders").onclick = () => setView("orders");
+$("#tCheck").onclick = () => setView("check");
+$("#main").addEventListener("click", e => {
+  if (e.target.id === "clBackup") download(new Blob([JSON.stringify(checklist.getTags(), null, 1)], {type: "application/json"}),
+    `AliExpress checklist backup ${new Date().toISOString().slice(0, 10)}.json`);
+  if (e.target.id === "clRestore") $("#clRestoreIn").click();
+});
+$("#main").addEventListener("change", async e => {
+  if (e.target.id !== "clRestoreIn" || !e.target.files[0]) return;
+  try {
+    const t = JSON.parse(await e.target.files[0].text());
+    if (!t || typeof t.items !== "object") throw new Error("not a checklist backup");
+    if (confirm(`Replace the ticks and tags in this browser with the backup (${Object.keys(t.items).length} items)?`)) await checklist.replaceTags(t);
+  } catch (err) { alert("Couldn't load that backup: " + err.message); }
+});
 $("#pick").disabled = $("#example").disabled = false;     // ready: the PDF reader has loaded
 document.addEventListener("drop", e => { e.preventDefault(); drop.classList.remove("over"); openFile(e.dataTransfer.files[0]); });
 </script>

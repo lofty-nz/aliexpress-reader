@@ -146,6 +146,11 @@ class H(BaseHTTPRequestHandler):
                     summary.summary_pdf(res, buf)
                     body, ctype, ext = buf.getvalue(), "application/pdf", "pdf"
                 return self.send(200, body, ctype, f"{stem}.{ext}")
+            if u.path == "/api/tags":
+                t = DATA / "tags.json"
+                return self.send(200, t.read_bytes() if t.exists() else b"null")
+            if u.path.startswith("/web/") and re.fullmatch(r"/web/[a-z]+\.mjs", u.path):
+                return self.send(200, (HERE / u.path.lstrip("/")).read_bytes(), "application/javascript; charset=utf-8")
             if u.path == "/api/folder":
                 return self.send(200, folder_pdfs(q.get("path") or str(Path.home() / "Sandbox")))
         except (ValueError, KeyError, OSError, subprocess.CalledProcessError) as e:
@@ -163,6 +168,16 @@ class H(BaseHTTPRequestHandler):
             if u.path == "/api/open-path":
                 p = Path(b["path"]).expanduser()
                 return self.send(200, add_pdf(p.read_bytes(), p.name))
+            if u.path == "/api/tags":
+                if not isinstance(b, dict) or not isinstance(b.get("items"), dict):
+                    return self.send(400, {"error": "not a checklist"})
+                t = DATA / "tags.json"
+                if t.exists():                                   # keep one previous copy
+                    shutil.copy2(t, DATA / "tags.prev.json")
+                tmp = DATA / "tags.json.tmp"
+                tmp.write_text(json.dumps(b, ensure_ascii=False), encoding="utf-8")
+                tmp.replace(t)
+                return self.send(200, {"ok": True})
             if u.path == "/api/reread":
                 return self.send(200, read_doc(b["id"]))
             if u.path == "/api/export":

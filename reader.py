@@ -19,7 +19,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 LAYOUT = "AliExpress orders list"
 
 MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}

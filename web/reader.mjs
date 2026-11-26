@@ -2,7 +2,7 @@
 // page PDF with pdf.js, entirely in the browser: the file is never uploaded. Money in cents, dates YYYY-MM-DD.
 // Works in the browser and in node (tests): pass pdf.js in.
 
-export const VERSION = "1.2.0";
+export const VERSION = "1.3.0";
 
 const MONTHS = {jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12};
 const DATE_RE = /^Date:\s*([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/;

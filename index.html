@@ -8,11 +8,11 @@
   :root { --bg:#f6f5f2; --card:#fff; --ink:#1d1d1b; --mute:#6b6a66; --line:#e3e1dc; --accent:#d4380d; --ok:#2f7d32; --warn:#b26a00; }
   * { box-sizing:border-box; }
   body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
-  header { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); }
+  header { display:flex; flex-wrap:wrap; align-items:center; gap:8px; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); }
   header h1 { font-size:17px; margin:0; }
   header h1 span { color:var(--accent); }
   .ver { color:var(--mute); font-size:12px; }
-  button { font:inherit; padding:6px 12px; border:1px solid var(--line); background:var(--card); border-radius:6px; cursor:pointer; }
+  button { white-space:nowrap; font:inherit; padding:6px 12px; border:1px solid var(--line); background:var(--card); border-radius:6px; cursor:pointer; }
   button.main { background:var(--accent); color:#fff; border-color:var(--accent); }
   button:disabled { opacity:.5; cursor:default; }
   .wrap { display:grid; grid-template-columns:190px minmax(0,1fr) minmax(300px, 28vw); height:calc(100vh - 51px); }
@@ -48,6 +48,10 @@
   dialog .row { padding:5px 8px; cursor:pointer; border-radius:4px; }
   dialog .row:hover { background:#f0eee9; }
   #msg { margin-left:auto; color:var(--mute); }
+  .tabs { display:inline-flex; border:1px solid var(--line); border-radius:7px; overflow:hidden; }
+  .tabs button { border:0; border-radius:0; }
+  .tabs button.on { background:var(--accent); color:#fff; }
+  body.check .wrap { grid-template-columns:190px minmax(0,1fr) !important; } body.check #side { display:none; }
   .warn { background:#fff1db; border:1px solid #f0d29a; padding:8px 12px; border-radius:6px; margin-bottom:10px; }
   dialog#xdlg { border:1px solid var(--line, #ccc); border-radius:12px; width:min(520px, 94vw); padding:18px; }
   dialog#xdlg label { display:block; margin:10px 0; font-size:14px; }
@@ -61,6 +65,7 @@
 <header>
   <h1><span>Ali</span>Express Reader</h1><span class="ver" id="ver"></span>
   <button id="bOpen">📂 Open a PDF…</button>
+  <span class="tabs"><button id="tOrders" class="on">📋 Orders</button><button id="tCheck">✅ Checklist</button></span>
   <button id="bExport" class="main" disabled>💾 Export for Statement Teacher</button>
   <button id="bCsv" disabled title="One row per order — opens in a spreadsheet">⬇ CSV</button>
   <button id="bXero" disabled title="Bills for Xero: import CSV or API JSON">⬇ Xero</button>
@@ -197,6 +202,27 @@ document.addEventListener("dragleave", () => document.body.classList.remove("dro
 document.addEventListener("drop", e => { e.preventDefault(); document.body.classList.remove("drop"); const f = e.dataTransfer.files[0]; if (f) upload(f); });
 api("/api/health").then(h => $("#ver").textContent = "v" + h.version);
 loadDocs();
+</script>
+<script type="module">
+// ✅ checklist (shared with the website tool: web/checklist.mjs), saved on this PC in data/tags.json
+import {createChecklist} from "/web/checklist.mjs";
+const checklist = createChecklist({
+  el: document.querySelector("#main"), getRes: () => S.res,
+  store: {load: async () => (await fetch("/api/tags")).json(),
+          save: async t => { const r = await fetch("/api/tags", {method: "POST", body: JSON.stringify(t)}); if (!r.ok) throw new Error((await r.json()).error); }},
+});
+let view = "orders";
+const showOrders = window.show;
+window.show = res => { S.res = res; S.doc = res.id; ["#bExport", "#bCsv", "#bPdf", "#bXero"].forEach(b => $(b).disabled = !res.orders.length);
+  return view === "check" ? checklist.render() : showOrders(res); };
+function setView(v) {
+  view = v;
+  $("#tOrders").classList.toggle("on", v === "orders"); $("#tCheck").classList.toggle("on", v === "check");
+  document.body.classList.toggle("check", v === "check");
+  if (S.res) window.show(S.res); else if (v === "check") checklist.render();
+}
+$("#tOrders").onclick = () => setView("orders");
+$("#tCheck").onclick = () => setView("check");
 </script>
 </body>
 </html>

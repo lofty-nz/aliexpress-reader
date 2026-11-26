@@ -19,6 +19,15 @@ Command line: `python3 reader.py file.pdf` (print) · `--json` · `--export DIR`
   Same rules as the Python reader: `tests/test_xero_and_web.py` checks both give the same answers.
 - **PC app** (`server.py`, :8835): the same, plus the Statement Teacher export.
 
+## ✅ Checklist
+📋 Orders / ✅ Checklist tabs (both versions; one shared file `web/checklist.mjs`). Every item from every order, sorted
+into groups from its name (Tools & soldering, Dev boards & displays, Connectors & cables, Components, Modules & power,
+Phone/computer/AV, Appliance parts, Chickens & pets, Other; orders with unnamed items get their own group). Per item: a tick
+(received / checked), a job number and a staff tag (typed; earlier ones offered again). Move an item by its group picker or
+by dragging it onto a group; ＋ New group for your own. Filter by job, staff, search or hide ticked; ⬇ Checklist CSV.
+Saved by order number + item, so they follow the item into later printouts: PC app → `data/tags.json` (previous copy
+`tags.prev.json`); website → the visitor's browser, with 💾 Backup / 📂 Restore.
+
 ## Xero
 ⬇ Xero → each paid order = one **Draft bill** from contact "AliExpress", invoice number = order number, date = due date =
 order date. Lines = items + a "Shipping, GST and fees" (or "Discount") line so each bill adds up to the card charge.
